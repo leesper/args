@@ -34,9 +34,7 @@ func TestShouldParseStrAsOptionValue(t *testing.T) {
 }
 
 // multiple options:
-// 	TODO: -l -p 8080 -d /usr/logs
 func TestShouldParseMultiOptions(t *testing.T) {
-	t.SkipNow()
 	options := Parse("-l", "-p", "8080", "-d", "/usr/logs").(MultiOptions)
 
 	if options.Logging() != true {
@@ -74,20 +72,6 @@ func TestExample2(t *testing.T) {
 	if !reflect.DeepEqual(listOptions.Decimals(), expectedDecimals) {
 		t.Fatalf("options.Decimals() = %v, want %v", listOptions.Decimals(), expectedDecimals)
 	}
-}
-
-type MultiOptions struct{}
-
-func (o MultiOptions) Logging() bool {
-	return false
-}
-
-func (o MultiOptions) Port() int {
-	return 0
-}
-
-func (o MultiOptions) Directory() string {
-	return ""
 }
 
 type ListOptions struct{}
