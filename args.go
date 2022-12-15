@@ -1,6 +1,22 @@
 package args
 
-import "strconv"
+import (
+	"reflect"
+	"strconv"
+)
+
+var supportedFlags = map[string]func(idx int, args []string) interface{}{
+	"-l": func(idx int, args []string) interface{} {
+		return true
+	},
+	"-p": func(idx int, args []string) interface{} {
+		val, _ := strconv.Atoi(args[idx+1])
+		return val
+	},
+	"-d": func(idx int, args []string) interface{} {
+		return args[idx+1]
+	},
+}
 
 type BooleanOption bool
 
@@ -27,62 +43,79 @@ type MultiOptions struct {
 }
 
 func Parse(args ...string) interface{} {
-	values := parseArgs(args)
-	return createOptions(values)
+	return createOptions(doParse(args))
 }
 
-func parseArgs(args []string) []interface{} {
+func doParse(args []string) interface{} {
+	if len(args) == 0 {
+		return false
+	}
+
 	values := []interface{}{}
-	for idx, arg := range args {
-		if arg == "-l" {
-			values = append(values, true)
-		} else if arg == "-p" {
-			value, _ := strconv.Atoi(args[idx+1])
-			values = append(values, value)
-		} else if arg == "-d" {
-			values = append(values, args[idx+1])
+
+	for flag, fn := range supportedFlags {
+		val := parse(flag, args, fn)
+		if val != nil {
+			values = append(values, val)
 		}
 	}
 
-	if len(values) == 0 {
-		values = append(values, false)
+	if len(values) == 1 {
+		return values[0]
 	}
 
 	return values
 }
 
-// factory function for creating options
-func createOptions(values []interface{}) interface{} {
-	optionDict := map[string]interface{}{
-		"bool":   BooleanOption(false),
-		"int":    IntOption(0),
-		"string": StringOption(""),
+func parse(flag string, args []string, valFn func(idx int, args []string) interface{}) interface{} {
+	if idx := contains(args, flag); idx != -1 {
+		return valFn(idx, args)
 	}
+	return nil
+}
 
-	typeTag := ""
-	for _, value := range values {
-		switch value := value.(type) {
-		case bool:
-			typeTag = "bool"
-			optionDict[typeTag] = BooleanOption(value)
-		case int:
-			typeTag = "int"
-			optionDict[typeTag] = IntOption(value)
-		case string:
-			typeTag = "string"
-			optionDict[typeTag] = StringOption(value)
+func contains(args []string, flag string) int {
+	for idx, arg := range args {
+		if arg == flag {
+			return idx
+		}
+	}
+	return -1
+}
+
+// factory function for creating options
+func createOptions(value interface{}) interface{} {
+	// FIXME: replace switch statements with polymorphism
+	switch v := reflect.ValueOf(value); v.Kind() {
+	case reflect.Bool:
+		return BooleanOption(value.(bool))
+	case reflect.Int:
+		return IntOption(value.(int))
+	case reflect.String:
+		return StringOption(value.(string))
+	case reflect.Slice:
+		singleOptions := map[string]interface{}{
+			"bool":   BooleanOption(false),
+			"int":    IntOption(0),
+			"string": StringOption(""),
+		}
+		vals := value.([]interface{})
+		for _, val := range vals {
+			switch val := val.(type) {
+			case bool:
+				singleOptions["bool"] = BooleanOption(val)
+			case int:
+				singleOptions["int"] = IntOption(val)
+			case string:
+				singleOptions["string"] = StringOption(val)
+			}
+		}
+		return MultiOptions{
+			BooleanOption: singleOptions["bool"].(BooleanOption),
+			IntOption:     singleOptions["int"].(IntOption),
+			StringOption:  singleOptions["string"].(StringOption),
 		}
 	}
 
-	if len(values) == 0 {
-		return BooleanOption(false)
-	} else if len(values) == 1 {
-		return optionDict[typeTag]
-	}
-
-	return MultiOptions{
-		BooleanOption: optionDict["bool"].(BooleanOption),
-		IntOption:     optionDict["int"].(IntOption),
-		StringOption:  optionDict["string"].(StringOption),
-	}
+	return nil
 }
