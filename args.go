@@ -5,7 +5,7 @@ import (
 	"strconv"
 )
 
-var supportedFlags = map[string]func(idx int, args []string) interface{}{
+var singleValuedParsers = map[string]func(idx int, args []string) interface{}{
 	"-l": func(idx int, args []string) interface{} {
 		return true
 	},
@@ -53,7 +53,7 @@ func doParse(args []string) interface{} {
 
 	values := []interface{}{}
 
-	for flag, fn := range supportedFlags {
+	for flag, fn := range singleValuedParsers {
 		val := parse(flag, args, fn)
 		if val != nil {
 			values = append(values, val)
@@ -83,39 +83,61 @@ func contains(args []string, flag string) int {
 	return -1
 }
 
-// factory function for creating options
-func createOptions(value interface{}) interface{} {
-	// FIXME: replace switch statements with polymorphism
-	switch v := reflect.ValueOf(value); v.Kind() {
-	case reflect.Bool:
-		return BooleanOption(value.(bool))
-	case reflect.Int:
-		return IntOption(value.(int))
-	case reflect.String:
-		return StringOption(value.(string))
-	case reflect.Slice:
-		singleOptions := map[string]interface{}{
-			"bool":   BooleanOption(false),
-			"int":    IntOption(0),
-			"string": StringOption(""),
-		}
-		vals := value.([]interface{})
-		for _, val := range vals {
-			switch val := val.(type) {
-			case bool:
-				singleOptions["bool"] = BooleanOption(val)
-			case int:
-				singleOptions["int"] = IntOption(val)
-			case string:
-				singleOptions["string"] = StringOption(val)
-			}
-		}
-		return MultiOptions{
-			BooleanOption: singleOptions["bool"].(BooleanOption),
-			IntOption:     singleOptions["int"].(IntOption),
-			StringOption:  singleOptions["string"].(StringOption),
+type optionFactory interface {
+	create(value interface{}) interface{}
+}
+
+type factoryFn func(interface{}) interface{}
+
+func (cf factoryFn) create(value interface{}) interface{} {
+	return cf(value)
+}
+
+var factories = map[reflect.Kind]optionFactory{
+	reflect.Bool:   factoryFn(booleanOptionFactory),
+	reflect.Int:    factoryFn(intOptionFactory),
+	reflect.String: factoryFn(stringOptionFactory),
+	reflect.Slice:  factoryFn(multiOptionsFactory),
+}
+
+// FIXME: duplicate code
+func booleanOptionFactory(value interface{}) interface{} {
+	return BooleanOption(value.(bool))
+}
+
+func intOptionFactory(value interface{}) interface{} {
+	return IntOption(value.(int))
+}
+
+func stringOptionFactory(value interface{}) interface{} {
+	return StringOption(value.(string))
+}
+
+func multiOptionsFactory(value interface{}) interface{} {
+	singleValuedOptions := map[string]interface{}{
+		"bool":   BooleanOption(false),
+		"int":    IntOption(0),
+		"string": StringOption(""),
+	}
+	vals := value.([]interface{})
+	for _, val := range vals {
+		switch val := val.(type) {
+		case bool:
+			singleValuedOptions["bool"] = BooleanOption(val)
+		case int:
+			singleValuedOptions["int"] = IntOption(val)
+		case string:
+			singleValuedOptions["string"] = StringOption(val)
 		}
 	}
+	return MultiOptions{
+		BooleanOption: singleValuedOptions["bool"].(BooleanOption),
+		IntOption:     singleValuedOptions["int"].(IntOption),
+		StringOption:  singleValuedOptions["string"].(StringOption),
+	}
+}
 
-	return nil
+// factory function for creating options
+func createOptions(value interface{}) interface{} {
+	return factories[reflect.ValueOf(value).Kind()].create(value)
 }
