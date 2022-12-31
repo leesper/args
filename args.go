@@ -10,10 +10,10 @@ func Parse(args ...string) interface{} {
 	return createOptions(doParse(args))
 }
 
-var singleValuedParsers map[string]func(idx int, args []string) interface{}
+var supportedFlagsParsers map[string]func(idx int, args []string) interface{}
 
 func init() {
-	singleValuedParsers = map[string]func(idx int, args []string) interface{}{
+	supportedFlagsParsers = map[string]func(idx int, args []string) interface{}{
 		"-l": func(idx int, args []string) interface{} {
 			return true
 		},
@@ -39,7 +39,7 @@ func doParse(args []string) interface{} {
 
 	values := []interface{}{}
 
-	for flag, fn := range singleValuedParsers {
+	for flag, fn := range supportedFlagsParsers {
 		val := parse(flag, args, fn)
 		if val != nil {
 			values = append(values, val)

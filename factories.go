@@ -6,17 +6,13 @@ var factories map[reflect.Kind]optionFactory
 
 func init() {
 	factories = map[reflect.Kind]optionFactory{
-		reflect.Bool: singleValuedOptionFactory(
-			reflect.TypeOf(BooleanOption(false)),
-			func(opt *reflect.Value, val interface{}) {
-				opt.SetBool(val.(bool))
-			}),
-		reflect.Int: singleValuedOptionFactory(
+		reflect.Bool: factoryFn(booleanOptionFactory),
+		reflect.Int: singleValuedOptionFactoryGenerator(
 			reflect.TypeOf(IntOption(0)),
 			func(opt *reflect.Value, val interface{}) {
 				opt.SetInt(int64(val.(int)))
 			}),
-		reflect.String: singleValuedOptionFactory(
+		reflect.String: singleValuedOptionFactoryGenerator(
 			reflect.TypeOf(StringOption("")),
 			func(opt *reflect.Value, val interface{}) {
 				opt.SetString(val.(string))
@@ -35,7 +31,7 @@ func (cf factoryFn) create(value interface{}) interface{} {
 	return cf(value)
 }
 
-func singleValuedOptionFactory(typ reflect.Type, setter func(opt *reflect.Value, val interface{})) factoryFn {
+func singleValuedOptionFactoryGenerator(typ reflect.Type, setter func(opt *reflect.Value, val interface{})) factoryFn {
 	optVal := reflect.New(typ).Elem()
 	f := func(v interface{}) interface{} {
 		setter(&optVal, v)
@@ -44,8 +40,12 @@ func singleValuedOptionFactory(typ reflect.Type, setter func(opt *reflect.Value,
 	return factoryFn(f)
 }
 
+func booleanOptionFactory(value interface{}) interface{} {
+	return BooleanOption(value.(bool))
+}
+
 func multiOptionsFactory(value interface{}) interface{} {
-	singleValuedOptions := map[reflect.Kind]interface{}{
+	supportedFlagsOptions := map[reflect.Kind]interface{}{
 		reflect.Bool:   BooleanOption(false),
 		reflect.Int:    IntOption(0),
 		reflect.String: StringOption(""),
@@ -54,12 +54,12 @@ func multiOptionsFactory(value interface{}) interface{} {
 	vals := value.([]interface{})
 	for _, val := range vals {
 		kind := reflect.ValueOf(val).Kind()
-		singleValuedOptions[kind] = factories[kind].create(val)
+		supportedFlagsOptions[kind] = factories[kind].create(val)
 	}
 
 	return MultiOptions{
-		BooleanOption: singleValuedOptions[reflect.Bool].(BooleanOption),
-		IntOption:     singleValuedOptions[reflect.Int].(IntOption),
-		StringOption:  singleValuedOptions[reflect.String].(StringOption),
+		BooleanOption: supportedFlagsOptions[reflect.Bool].(BooleanOption),
+		IntOption:     supportedFlagsOptions[reflect.Int].(IntOption),
+		StringOption:  supportedFlagsOptions[reflect.String].(StringOption),
 	}
 }
