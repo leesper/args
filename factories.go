@@ -22,29 +22,29 @@ func init() {
 }
 
 type optionFactory interface {
-	create(value interface{}) interface{}
+	create(value interface{}) (interface{}, error)
 }
 
-type factoryFn func(interface{}) interface{}
+type factoryFn func(interface{}) (interface{}, error)
 
-func (cf factoryFn) create(value interface{}) interface{} {
+func (cf factoryFn) create(value interface{}) (interface{}, error) {
 	return cf(value)
 }
 
 func singleValuedOptionFactoryGenerator(typ reflect.Type, setter func(opt *reflect.Value, val interface{})) factoryFn {
 	optVal := reflect.New(typ).Elem()
-	f := func(v interface{}) interface{} {
+	f := func(v interface{}) (interface{}, error) {
 		setter(&optVal, v)
-		return optVal.Interface()
+		return optVal.Interface(), nil
 	}
 	return factoryFn(f)
 }
 
-func booleanOptionFactory(value interface{}) interface{} {
-	return BooleanOption(value.(bool))
+func booleanOptionFactory(value interface{}) (interface{}, error) {
+	return BooleanOption(value.(bool)), nil
 }
 
-func multiOptionsFactory(value interface{}) interface{} {
+func multiOptionsFactory(value interface{}) (interface{}, error) {
 	supportedFlagsOptions := map[reflect.Kind]interface{}{
 		reflect.Bool:   BooleanOption(false),
 		reflect.Int:    IntOption(0),
@@ -54,12 +54,16 @@ func multiOptionsFactory(value interface{}) interface{} {
 	vals := value.([]interface{})
 	for _, val := range vals {
 		kind := reflect.ValueOf(val).Kind()
-		supportedFlagsOptions[kind] = factories[kind].create(val)
+		var err error
+		supportedFlagsOptions[kind], err = factories[kind].create(val)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return MultiOptions{
 		BooleanOption: supportedFlagsOptions[reflect.Bool].(BooleanOption),
 		IntOption:     supportedFlagsOptions[reflect.Int].(IntOption),
 		StringOption:  supportedFlagsOptions[reflect.String].(StringOption),
-	}
+	}, nil
 }
